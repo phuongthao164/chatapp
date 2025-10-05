@@ -10,6 +10,7 @@ from PyQt5.QtCore import Qt
 # ---------------------- CLASS POPUP CHAT ----------------------
 class ChatWindow(QtWidgets.QWidget):
     new_message_signal = QtCore.pyqtSignal(str)
+    closed_signal = QtCore.pyqtSignal(str)
 
     def __init__(self, nickname, to_user, client_socket):
         super().__init__()
@@ -63,6 +64,9 @@ class ChatWindow(QtWidgets.QWidget):
     def new_message(self, msg):
         self.new_message_signal.emit(msg)
 
+    def closeEvent(self, event):
+        self.closed_signal.emit(self.to_user)  # Gửi tín hiệu khi đóng
+        super().closeEvent(event)   
 
 # ---------------------- CLASS MAIN WINDOW ----------------------
 class MainWindow(QtWidgets.QWidget):
@@ -194,7 +198,7 @@ class MainWindow(QtWidgets.QWidget):
                         sender = msg.split("[PM từ ", 1)[1].split("]:", 1)[0].strip()
                     except Exception:
                         sender = "Unknown"
-                    # Emit signal để UI chính mở popup
+                    # Gửi tín hiệu mở popup
                     self.open_pm_signal.emit(sender, msg)
                     continue
 
@@ -209,6 +213,7 @@ class MainWindow(QtWidgets.QWidget):
     def handle_private_message(self, sender, msg):
         if sender not in self.private_chats:
             self.private_chats[sender] = ChatWindow(self.nickname, sender, self.client_socket)
+            self.private_chats[sender].closed_signal.connect(self.remove_chat)
             self.private_chats[sender].show()
         self.private_chats[sender].new_message(msg)
         # Làm nổi bật cửa sổ khi có tin nhắn mới
@@ -222,7 +227,13 @@ class MainWindow(QtWidgets.QWidget):
             return
         if to_user not in self.private_chats:
             self.private_chats[to_user] = ChatWindow(self.nickname, to_user, self.client_socket)
+            self.private_chats[to_user].closed_signal.connect(self.remove_chat)
             self.private_chats[to_user].show()
+
+    # --------- XÓA CỬA SỔ ĐÃ ĐÓNG ---------
+    def remove_chat(self, to_user):
+        if to_user in self.private_chats:
+            del self.private_chats[to_user]
 
 
 # ---------------------- MAIN ----------------------
