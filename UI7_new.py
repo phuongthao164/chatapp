@@ -138,11 +138,17 @@ class ChatWindow(QtWidgets.QWidget):
         self.chat_area.setReadOnly(True)
         layout.addWidget(self.chat_area)
 
-        # Ô nhập tin nhắn
+        # ------- Ô nhập tin nhắn + nút Gửi -------
+        input_layout = QtWidgets.QHBoxLayout()
         self.input_box = QtWidgets.QLineEdit(self)
-        self.input_box.setPlaceholderText("Nhập tin nhắn và nhấn Enter...")
+        self.input_box.setPlaceholderText("Nhập tin nhắn...")
         self.input_box.returnPressed.connect(self.send_message)
-        layout.addWidget(self.input_box)
+        input_layout.addWidget(self.input_box, 4)
+
+        send_btn = QtWidgets.QPushButton("Gửi")
+        send_btn.clicked.connect(self.send_message)
+        input_layout.addWidget(send_btn, 1)
+        layout.addLayout(input_layout)
 
         # Signal cập nhật tin nhắn
         self.new_message_signal.connect(self.chat_area.append)
@@ -158,8 +164,12 @@ class ChatWindow(QtWidgets.QWidget):
         self.new_message_signal.emit(msg)
 
     def closeEvent(self, event):
-        self.closed_signal.emit(self.to_user)  # Gửi tín hiệu khi đóng
-        super().closeEvent(event)   
+        """Xử lý khi đóng cửa sổ chat riêng"""
+        try:
+            self.closed_signal.emit(self.to_user)
+        except:
+            pass
+        event.accept()  # cho phép đóng cửa sổ 
 
 # ---------------------- CLASS MAIN WINDOW ----------------------
 class MainWindow(QtWidgets.QWidget):
@@ -186,36 +196,55 @@ class MainWindow(QtWidgets.QWidget):
         self.chat_area.setReadOnly(True)
         left_panel.addWidget(self.chat_area)
 
+        # Hàng nhập tin nhắn + nút Gửi
+        input_layout = QtWidgets.QHBoxLayout()
         self.input_box = QtWidgets.QLineEdit(self)
-        self.input_box.setPlaceholderText("Nhập tin nhắn và nhấn Enter...")
+        self.input_box.setPlaceholderText("Nhập tin nhắn...")
         self.input_box.returnPressed.connect(self.send_message)
-        left_panel.addWidget(self.input_box)
+        input_layout.addWidget(self.input_box, 4)
 
+        send_btn = QtWidgets.QPushButton("Gửi")
+
+        send_btn.clicked.connect(self.send_message)
+        input_layout.addWidget(send_btn, 1)
+
+        left_panel.addLayout(input_layout)
+        layout.addLayout(left_panel, 3)
+
+        # ---------- DANH SÁCH USER ONLINE + NÚT ĐĂNG XUẤT ----------
+        right_panel = QtWidgets.QVBoxLayout()
+
+        self.user_list = QtWidgets.QListWidget(self)
+        self.user_list.itemDoubleClicked.connect(self.open_private_chat)
+        right_panel.addWidget(self.user_list)
+
+        # Nút Đăng xuất ở cuối danh sách
         logout_btn = QtWidgets.QPushButton("Đăng xuất")
         logout_btn.setStyleSheet("""
             QPushButton {
-                background-color: #ff4d4d;   /* đỏ nhạt */
-                color: white;               /* chữ trắng */
+                background-color: #ff4d4d;
+                color: white;
                 border-radius: 8px;
                 padding: 6px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #ff6666;  /* khi di chuột */
+                background-color: #ff6666;
             }
             QPushButton:pressed {
-                background-color: #e63946;  /* khi bấm */
+                background-color: #e63946;
             }
         """)
         logout_btn.clicked.connect(self.logout)
-        left_panel.addWidget(logout_btn)
 
-        layout.addLayout(left_panel, 3)
+        # Canh xuống cuối
+        logout_container = QtWidgets.QHBoxLayout()
+        logout_container.addStretch()
+        logout_container.addWidget(logout_btn)
+        logout_container.addStretch()
 
-        # ---------- DANH SÁCH USER ONLINE ----------
-        self.user_list = QtWidgets.QListWidget(self)
-        self.user_list.itemDoubleClicked.connect(self.open_private_chat)
-        layout.addWidget(self.user_list, 1)
+        right_panel.addLayout(logout_container)
+        layout.addLayout(right_panel, 1)
 
         # ---------- KẾT NỐI SIGNAL ----------
         self.new_message_signal.connect(self.chat_area.append)
@@ -279,13 +308,20 @@ class MainWindow(QtWidgets.QWidget):
                 if msg.startswith("[PM từ"):
                     try:
                         sender = msg.split("[PM từ ", 1)[1].split("]:", 1)[0].strip()
+                        # In đậm tên người gửi trong tin nhắn riêng
+                        msg = msg.replace(f"[PM từ {sender}]:", f"<b>[PM từ {sender}]</b>:")
                     except Exception:
                         sender = "Unknown"
                     # Gửi tín hiệu mở popup
                     self.open_pm_signal.emit(sender, msg)
                     continue
 
-                # Tin nhắn chung
+                # Tin nhắn chung — in đậm tên người gửi nếu có dạng "tên: nội_dung"
+                if ":" in msg and not msg.startswith("SERVER"):
+                    parts = msg.split(":", 1)
+                    sender = parts[0].strip()
+                    content = parts[1].strip()
+                    msg = f"<b>{sender}:</b> {content}"
                 self.new_message_signal.emit(msg)
 
             except Exception as e:
@@ -313,6 +349,9 @@ class MainWindow(QtWidgets.QWidget):
             self.private_chats[to_user] = ChatWindow(self.nickname, to_user, self.client_socket)
             self.private_chats[to_user].closed_signal.connect(self.remove_chat)
             self.private_chats[to_user].show()
+        else:
+            self.private_chats[to_user].raise_()
+            self.private_chats[to_user].activateWindow()
 
     # --------- XÓA CỬA SỔ ĐÃ ĐÓNG ---------
     def remove_chat(self, to_user):
@@ -330,15 +369,37 @@ class MainWindow(QtWidgets.QWidget):
         )
 
         if reply == QtWidgets.QMessageBox.Ok:
+            # Đóng tất cả popup chat riêng
+            for chat in list(self.private_chats.values()):
+                chat.close()
+            self.private_chats.clear()
+
             try:
                 self.client_socket.send(b"/logout")
                 self.client_socket.close()
             except:
                 pass
+
             QtWidgets.QApplication.quit()
         else:
             # Người dùng chọn Cancel -> đóng popup, tiếp tục chat
             return
+
+    def closeEvent(self, event):
+        """Đóng tất cả popup chat riêng khi đóng cửa sổ chính"""
+        try:
+            # Đóng tất cả popup chat riêng
+            for chat in list(self.private_chats.values()):
+                chat.close()
+            self.private_chats.clear()
+
+            # Gửi lệnh logout về server
+            self.client_socket.send(b"/logout")
+            self.client_socket.close()
+        except:
+            pass
+
+        event.accept()   
 
 # ---------------------- MAIN ----------------------
 def main():

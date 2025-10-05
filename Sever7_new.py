@@ -84,10 +84,18 @@ def handle_client(client, nickname):
         print(f"⚠️ Lỗi xử lý {nickname}: {e}")
 
     finally:
+        # Xóa client khỏi danh sách nếu còn tồn tại
         if nickname in clients:
-            del clients[nickname]
-        client.close()
-        del clients[nickname]
+            try:
+                del clients[nickname]
+            except KeyError:
+                pass
+
+        try:
+            client.close()
+        except:
+            pass
+        
         print(f"❌ {nickname} đã thoát")
         broadcast(f"SERVER: {nickname} đã thoát")
         update_online_list()
