@@ -76,8 +76,7 @@ def handle_client(client, nickname):
                         clients[to_user].send((f"[PM từ {nickname}]: {content}\n").encode("utf-8"))
                     else:
                     # Báo lại cho người gửi nếu không tìm thấy người nhận
-                        error_msg = f"/pm_error {to_user} Không tìm thấy người dùng '{to_user}'"
-                        client.send(error_msg.encode("utf-8"))
+                        client.send((f"SERVER: Không tìm thấy người dùng '{to_user}'\n").encode("utf-8"))
             else:
                 broadcast(f"{nickname}: {msg}", client)
 

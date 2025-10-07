@@ -6,6 +6,7 @@ import threading
 from PyQt5 import QtWidgets, QtGui, QtCore
 from PyQt5.QtCore import Qt
 
+
 # ---------------------- CLASS POPUP CHAT ----------------------
 class ChatWindow(QtWidgets.QWidget):
     new_message_signal = QtCore.pyqtSignal(str)
@@ -71,7 +72,7 @@ class ChatWindow(QtWidgets.QWidget):
 class MainWindow(QtWidgets.QWidget):
     new_message_signal = QtCore.pyqtSignal(str)
     user_list_signal = QtCore.pyqtSignal(list)
-    open_pm_signal = QtCore.pyqtSignal(str, str)
+    open_pm_signal = QtCore.pyqtSignal(str, str)  # sender, msg
 
     def __init__(self, nickname, client_socket):
         super().__init__()
