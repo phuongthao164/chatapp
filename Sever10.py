@@ -7,7 +7,7 @@ HOST = "0.0.0.0"
 PORT = 5000
 DATA_FILE = "users.json"
 
-clients = {}  # nickname -> socket
+clients = {}   # nickname -> socket
 accounts = {}  # username -> password
 
 
@@ -37,9 +37,8 @@ def save_accounts():
     except Exception as e:
         print(f"⚠️ Lỗi khi lưu file {DATA_FILE}: {e}")
 
-        
+
 # ---------------------- CHAT CHUNG ----------------------
-# Gửi tin nhắn cho tất cả client (broadcast)
 def broadcast(message, _client=None):
     for client in clients.values():
         if client != _client:
@@ -48,11 +47,10 @@ def broadcast(message, _client=None):
             except:
                 pass
 
+
 def handle_client(client, nickname):
     clients[nickname] = client
-    print(f"✅ {nickname} đã kết nối")
-
-    # Thông báo user online
+    print(f"✅ {nickname} đã đăng nhập")
     broadcast(f"SERVER: {nickname} đã tham gia phòng chat\n")
     update_online_list()
 
@@ -68,38 +66,28 @@ def handle_client(client, nickname):
             if msg.startswith("/pm "):
                 parts = msg.split(" ", 2)
                 if len(parts) >= 3:
-                    to_user = parts[1].strip()   
+                    to_user = parts[1].strip()
                     content = parts[2].strip()
+                    print(f"📩 PM từ {nickname} -> {to_user}: {content}")
 
-                    # Gửi tin riêng
                     if to_user in clients:
-                        clients[to_user].send((f"[PM từ {nickname}]: {content}\n").encode("utf-8"))
+                        clients[to_user].send(f"[PM từ {nickname}]: {content}".encode("utf-8"))
                     else:
-                    # Báo lại cho người gửi nếu không tìm thấy người nhận
-                        error_msg = f"/pm_error {to_user} Không tìm thấy người dùng '{to_user}'"
-                        client.send(error_msg.encode("utf-8"))
-            else:
-                broadcast(f"{nickname}: {msg}", client)
+                        client.send(f"SERVER: Không tìm thấy người dùng '{to_user}'\n".encode("utf-8"))
+                continue
+
+            broadcast(f"{nickname}: {msg}", client)
 
     except Exception as e:
         print(f"⚠️ Lỗi xử lý {nickname}: {e}")
-
     finally:
-        # Xóa client khỏi danh sách nếu còn tồn tại
         if nickname in clients:
-            try:
-                del clients[nickname]
-            except KeyError:
-                pass
-
-        try:
-            client.close()
-        except:
-            pass
-        
+            del clients[nickname]
+        client.close()
         print(f"❌ {nickname} đã thoát")
         broadcast(f"SERVER: {nickname} đã thoát")
         update_online_list()
+
 
 def update_online_list():
     user_list = "/users " + ",".join(clients.keys())
@@ -108,6 +96,7 @@ def update_online_list():
             client.send(user_list.encode("utf-8"))
         except:
             pass
+
 
 # ---------------------- XỬ LÝ LOGIN / REGISTER ----------------------
 def main():
@@ -160,6 +149,7 @@ def main():
         except Exception as e:
             print("⚠️ Lỗi khi nhận login/register:", e)
             client.close()
+
 
 if __name__ == "__main__":
     main()

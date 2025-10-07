@@ -6,10 +6,9 @@ import threading
 from PyQt5 import QtWidgets, QtGui, QtCore
 from PyQt5.QtCore import Qt
 
-# ---------------------- CLASS POPUP CHAT ----------------------
+
 class ChatWindow(QtWidgets.QWidget):
-    new_message_signal = QtCore.pyqtSignal(str)
-    closed_signal = QtCore.pyqtSignal(str)
+    new_message_signal = QtCore.pyqtSignal(str)  # signal update chat
 
     def __init__(self, nickname, to_user, client_socket):
         super().__init__()
@@ -22,13 +21,15 @@ class ChatWindow(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout(self)
 
-        # Khu vực hiển thị chat
+        # Chat area
         self.chat_area = QtWidgets.QTextEdit(self)
         self.chat_area.setReadOnly(True)
         self.chat_area.setStyleSheet("""
             QTextEdit {
-                background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1,
-                stop:0 #f5f7fa, stop:1 #c3cfe2);
+                background: qlineargradient(
+                    spread:pad, x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #f5f7fa, stop:1 #c3cfe2
+                );
                 border-radius: 10px;
                 padding: 6px;
                 font-size: 14px;
@@ -36,7 +37,7 @@ class ChatWindow(QtWidgets.QWidget):
         """)
         layout.addWidget(self.chat_area)
 
-        # Ô nhập tin nhắn
+        # Input box
         self.input_box = QtWidgets.QLineEdit(self)
         self.input_box.setPlaceholderText("Nhập tin nhắn và nhấn Enter...")
         self.input_box.returnPressed.connect(self.send_message)
@@ -50,7 +51,7 @@ class ChatWindow(QtWidgets.QWidget):
         """)
         layout.addWidget(self.input_box)
 
-        # Signal cập nhật tin nhắn
+        # connect signal
         self.new_message_signal.connect(self.chat_area.append)
 
     def send_message(self):
@@ -63,15 +64,11 @@ class ChatWindow(QtWidgets.QWidget):
     def new_message(self, msg):
         self.new_message_signal.emit(msg)
 
-    def closeEvent(self, event):
-        self.closed_signal.emit(self.to_user)  # Gửi tín hiệu khi đóng
-        super().closeEvent(event)   
 
-# ---------------------- CLASS MAIN WINDOW ----------------------
 class MainWindow(QtWidgets.QWidget):
-    new_message_signal = QtCore.pyqtSignal(str)
-    user_list_signal = QtCore.pyqtSignal(list)
-    open_pm_signal = QtCore.pyqtSignal(str, str)
+    new_message_signal = QtCore.pyqtSignal(str)   # chat chung
+    user_list_signal = QtCore.pyqtSignal(list)    # danh sách user
+
 
     def __init__(self, nickname, client_socket):
         super().__init__()
@@ -84,15 +81,17 @@ class MainWindow(QtWidgets.QWidget):
 
         layout = QtWidgets.QHBoxLayout(self)
 
-        # ---------- KHU VỰC CHAT CHUNG ----------
+        # Khu vực chat chung
         left_panel = QtWidgets.QVBoxLayout()
 
         self.chat_area = QtWidgets.QTextEdit(self)
         self.chat_area.setReadOnly(True)
         self.chat_area.setStyleSheet("""
             QTextEdit {
-                background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1,
-                stop:0 #d9a7c7, stop:1 #fffcdc);
+                background: qlineargradient(
+                    spread:pad, x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #d9a7c7, stop:1 #fffcdc
+                );
                 border-radius: 10px;
                 padding: 8px;
                 font-size: 14px;
@@ -112,9 +111,10 @@ class MainWindow(QtWidgets.QWidget):
             }
         """)
         left_panel.addWidget(self.input_box)
+
         layout.addLayout(left_panel, 3)
 
-        # ---------- DANH SÁCH USER ONLINE ----------
+        # Danh sách user
         self.user_list = QtWidgets.QListWidget(self)
         self.user_list.itemDoubleClicked.connect(self.open_private_chat)
         self.user_list.setStyleSheet("""
@@ -133,21 +133,19 @@ class MainWindow(QtWidgets.QWidget):
         """)
         layout.addWidget(self.user_list, 1)
 
-        # ---------- KẾT NỐI SIGNAL ----------
+        # connect signal
         self.new_message_signal.connect(self.chat_area.append)
         self.user_list_signal.connect(self.update_user_list)
-        self.open_pm_signal.connect(self.handle_private_message)
 
-        # Thread nhận tin nhắn từ server
+        # Thread nhận tin nhắn
         threading.Thread(target=self.receive_messages, daemon=True).start()
 
-    # --------- CẬP NHẬT DANH SÁCH USER ONLINE ---------
     def update_user_list(self, users):
         self.user_list.clear()
         for user in users:
             if user:
                 item = QtWidgets.QListWidgetItem(user)
-                # Biểu tượng chấm xanh online
+                # thêm icon xanh online
                 pixmap = QtGui.QPixmap(12, 12)
                 pixmap.fill(Qt.transparent)
                 painter = QtGui.QPainter(pixmap)
@@ -159,7 +157,6 @@ class MainWindow(QtWidgets.QWidget):
                 item.setIcon(icon)
                 self.user_list.addItem(item)
 
-    # --------- GỬI TIN NHẮN CHUNG ---------
     def send_message(self):
         msg = self.input_box.text().strip()
         if msg:
@@ -167,77 +164,37 @@ class MainWindow(QtWidgets.QWidget):
             self.chat_area.append(f"<b>Bạn:</b> {msg}")
             self.input_box.clear()
 
-    # --------- NHẬN TIN TỪ SERVER ---------
     def receive_messages(self):
         while True:
             try:
                 msg = self.client_socket.recv(1024).decode("utf-8")
-                if not msg:
-                    break
-
-                # Nếu chuỗi chứa /users
-                if "/users " in msg:
-                    main_part, user_part = msg.split("/users ", 1)
-                    msg = main_part.strip()
-                    users = user_part.split(",")
-                    self.user_list_signal.emit(users)
-                    if msg:
-                        self.new_message_signal.emit(msg)
-                    continue
-
-                # Nếu chỉ là danh sách user
                 if msg.startswith("/users "):
                     users = msg.replace("/users ", "").split(",")
                     self.user_list_signal.emit(users)
-                    continue
-
-                # Tin nhắn riêng tư
-                if msg.startswith("[PM từ"):
-                    try:
-                        sender = msg.split("[PM từ ", 1)[1].split("]:", 1)[0].strip()
-                    except Exception:
-                        sender = "Unknown"
-                    # Gửi tín hiệu mở popup
-                    self.open_pm_signal.emit(sender, msg)
-                    continue
-
-                # Tin nhắn chung
-                self.new_message_signal.emit(msg)
-
+                elif msg.startswith("[PM từ"):
+                    sender = msg.split(" ")[2][:-2]  # lấy tên người gửi
+                    if sender not in self.private_chats:
+                        self.private_chats[sender] = ChatWindow(self.nickname, sender, self.client_socket)
+                        self.private_chats[sender].show()
+                    self.private_chats[sender].new_message(msg)
+                else:
+                    self.new_message_signal.emit(msg)
             except Exception as e:
                 print("Lỗi khi nhận tin:", e)
                 break
 
-    # --------- XỬ LÝ HIỂN THỊ POPUP PM ---------
-    def handle_private_message(self, sender, msg):
-        if sender not in self.private_chats:
-            self.private_chats[sender] = ChatWindow(self.nickname, sender, self.client_socket)
-            self.private_chats[sender].closed_signal.connect(self.remove_chat)
-            self.private_chats[sender].show()
-        self.private_chats[sender].new_message(msg)
-        # Làm nổi bật cửa sổ khi có tin nhắn mới
-        self.private_chats[sender].raise_()
-        self.private_chats[sender].activateWindow()
-
-    # --------- MỞ CỬA SỔ CHAT RIÊNG ---------
     def open_private_chat(self, item):
         to_user = item.text()
         if to_user == self.nickname:
             return
         if to_user not in self.private_chats:
             self.private_chats[to_user] = ChatWindow(self.nickname, to_user, self.client_socket)
-            self.private_chats[to_user].closed_signal.connect(self.remove_chat)
             self.private_chats[to_user].show()
 
-    # --------- XÓA CỬA SỔ ĐÃ ĐÓNG ---------
-    def remove_chat(self, to_user):
-        if to_user in self.private_chats:
-            del self.private_chats[to_user]
 
-
-# ---------------------- MAIN ----------------------
 def main():
     app = QtWidgets.QApplication(sys.argv)
+
     nickname, ok = QtWidgets.QInputDialog.getText(None, "Đăng nhập", "Nhập nickname của bạn:")
     if not ok or not nickname:
         return

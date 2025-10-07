@@ -111,6 +111,8 @@ class AuthWindow(QtWidgets.QDialog):
             if resp == "/register_ok":
                 self.result_reg.setStyleSheet("color:green;")
                 self.result_reg.setText("✅ Đăng ký thành công! Hãy đăng nhập.")
+                self.user_reg.clear()
+                self.pass_reg.clear()
             else:
                 self.result_reg.setText("❌ Tên tài khoản đã tồn tại.")
             s.close()
@@ -169,7 +171,7 @@ class ChatWindow(QtWidgets.QWidget):
             self.closed_signal.emit(self.to_user)
         except:
             pass
-        event.accept()  # cho phép đóng cửa sổ 
+        event.accept() 
 
 # ---------------------- CLASS MAIN WINDOW ----------------------
 class MainWindow(QtWidgets.QWidget):
@@ -184,7 +186,6 @@ class MainWindow(QtWidgets.QWidget):
         self.private_chats = {}
 
         self.setWindowTitle(f"Trò chuyện cùng - {nickname}")
-        self.setWindowIcon(QtGui.QIcon("icon.png"))
         self.resize(700, 400)
 
         layout = QtWidgets.QHBoxLayout(self)
@@ -213,7 +214,19 @@ class MainWindow(QtWidgets.QWidget):
 
         # ---------- DANH SÁCH USER ONLINE + NÚT ĐĂNG XUẤT ----------
         right_panel = QtWidgets.QVBoxLayout()
+        # --- Tiêu đề "Danh sách người đang online" ---
+        title_label = QtWidgets.QLabel("👥 Danh sách người đang online")
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet("""
+            QLabel {
+                font-weight: bold;
+                color: #0078d7;
+                margin-bottom: 6px;
+            }
+        """)
+        right_panel.addWidget(title_label)
 
+        # Danh sách user
         self.user_list = QtWidgets.QListWidget(self)
         self.user_list.itemDoubleClicked.connect(self.open_private_chat)
         right_panel.addWidget(self.user_list)
@@ -236,8 +249,6 @@ class MainWindow(QtWidgets.QWidget):
             }
         """)
         logout_btn.clicked.connect(self.logout)
-
-        # Canh xuống cuối
         logout_container = QtWidgets.QHBoxLayout()
         logout_container.addStretch()
         logout_container.addWidget(logout_btn)
@@ -258,19 +269,24 @@ class MainWindow(QtWidgets.QWidget):
     def update_user_list(self, users):
         self.user_list.clear()
         for user in users:
-            if user:
-                item = QtWidgets.QListWidgetItem(user)
-                # Biểu tượng chấm xanh online
-                pixmap = QtGui.QPixmap(12, 12)
-                pixmap.fill(Qt.transparent)
-                painter = QtGui.QPainter(pixmap)
-                painter.setBrush(Qt.green)
-                painter.setPen(Qt.green)
-                painter.drawEllipse(0, 0, 12, 12)
-                painter.end()
-                icon = QtGui.QIcon(pixmap)
-                item.setIcon(icon)
-                self.user_list.addItem(item)
+            if not user:
+                continue
+
+            display_name = f"{user} (tôi)" if user == self.nickname else user
+            item = QtWidgets.QListWidgetItem(f"  {display_name}")
+
+            # Tạo icon tròn xanh lá
+            pixmap = QtGui.QPixmap(14, 14)
+            pixmap.fill(Qt.transparent)
+            painter = QtGui.QPainter(pixmap)
+            painter.setRenderHint(QtGui.QPainter.Antialiasing)
+            painter.setBrush(QtGui.QColor("#3CB371"))
+            painter.setPen(QtGui.QPen(QtGui.QColor("#2E8B57")))
+            painter.drawEllipse(1, 1, 12, 12)
+            painter.end()
+
+            item.setIcon(QtGui.QIcon(pixmap))
+            self.user_list.addItem(item)
 
     # --------- GỬI TIN NHẮN CHUNG ---------
     def send_message(self):
@@ -305,6 +321,25 @@ class MainWindow(QtWidgets.QWidget):
                     continue
 
                 # Tin nhắn riêng tư
+                # Tin nhắn lỗi khi gửi PM tới user không tồn tại
+                if msg.startswith("/pm_error "):
+                    try:
+                        _, to_user, content = msg.split(" ", 2)
+                        if to_user not in self.private_chats:
+                            # Mở popup mới nếu chưa có
+                            self.private_chats[to_user] = ChatWindow(self.nickname, to_user, self.client_socket)
+                            self.private_chats[to_user].closed_signal.connect(self.remove_chat)
+                            self.private_chats[to_user].show()
+
+                        # Hiển thị lỗi trong popup chat tương ứng
+                        error_html = (
+                            f"<div style='color:red; font-size:12px;'>SERVER: {content}</div>"
+                        )
+                        self.private_chats[to_user].new_message(error_html)
+                    except Exception as e:
+                        print("Lỗi xử lý /pm_error:", e)
+                    continue
+
                 if msg.startswith("[PM từ"):
                     try:
                         sender = msg.split("[PM từ ", 1)[1].split("]:", 1)[0].strip()
@@ -314,6 +349,13 @@ class MainWindow(QtWidgets.QWidget):
                         sender = "Unknown"
                     # Gửi tín hiệu mở popup
                     self.open_pm_signal.emit(sender, msg)
+                    continue
+
+                    # Định dạng thông báo hệ thống
+                if msg.startswith("SERVER:"):
+                    msg_text = msg.replace("SERVER:", "").strip()
+                    # Gộp chung xử lý hệ thống
+                    self.new_message_signal.emit(f"<i style='color:gray;'>{msg_text}</i>")
                     continue
 
                 # Tin nhắn chung — in đậm tên người gửi nếu có dạng "tên: nội_dung"
@@ -336,13 +378,12 @@ class MainWindow(QtWidgets.QWidget):
             self.private_chats[sender].closed_signal.connect(self.remove_chat)
             self.private_chats[sender].show()
         self.private_chats[sender].new_message(msg)
-        # Làm nổi bật cửa sổ khi có tin nhắn mới
         self.private_chats[sender].raise_()
         self.private_chats[sender].activateWindow()
 
     # --------- MỞ CỬA SỔ CHAT RIÊNG ---------
     def open_private_chat(self, item):
-        to_user = item.text()
+        to_user = item.text().split(" (tôi)")[0].strip() 
         if to_user == self.nickname:
             return
         if to_user not in self.private_chats:
@@ -412,7 +453,6 @@ def main():
             font-family: Segoe UI, sans-serif;
             font-size: 14px;
         }
-
         QLineEdit {
             border: 2px solid #0078d7;
             border-radius: 6px;
@@ -420,10 +460,9 @@ def main():
             background: white;
         }
         QLineEdit:focus {
-            border: 2px solid #005999;
+            border-color: #005999;
             background: #f0f8ff;
         }
-
         QPushButton {
             background-color: #0078d7;
             color: white;
@@ -431,27 +470,18 @@ def main():
             padding: 6px 10px;
             font-weight: 600;
         }
-        QPushButton:hover {
-            background-color: #339cff;
-        }
-        QPushButton:pressed {
-            background-color: #005999;
-        }
-
+        QPushButton:hover { background-color: #339cff; }
+        QPushButton:pressed { background-color: #005999; }
         QTextEdit {
             background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1,
                         stop:0 #f5f7fa, stop:1 #c3cfe2);
             border-radius: 10px;
             padding: 6px;
         }
-
         QListWidget {
             background-color: #f0f0f0;
             border-radius: 10px;
             padding: 4px;
-        }
-        QListWidget::item {
-            padding: 6px;
         }
         QListWidget::item:selected {
             background: #aee1f9;
